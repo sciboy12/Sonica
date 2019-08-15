@@ -1,170 +1,166 @@
-from functools import wraps
-import errno
 import sys
-import importlib
 import os
+# Enables importing snowboydecoder from subdir
 sys.path.insert(1, './snowboy')
 import snowboydecoder
 import pyaudio
-import signal
 import vlc
-import numpy
 import datetime
 import pyttsx3
-from contextlib import contextmanager
-pause_on_time = True
-interrupted = False
+
+# Init pyttsx3
 engine = pyttsx3.init()
 
-engine.setProperty('volume',1.55)
-engine.setProperty('rate', 155)
+# Config
+# speech volume and rate
+engine.setProperty('volume',2)
+engine.setProperty('rate', 157)
 
-command_sensitivity=0.5
-hotword_sensitivity=0.6
+# Sensitivity for all menu commands
+command_sensitivity=0.4
 
-station1 = vlc.MediaPlayer("https://wosu.streamguys1.com/Classical_128")
-#station1.audio_set_volume(80)
+# Hotword1 sensitivity
+hotword_sensitivity=0.43
 
-#station1 = vlc.MediaPlayer("https://listen.moe/stream")
-#station1.audio_set_volume(121)
+# Normal playback volume
+vol = 100
 
-station2 = vlc.MediaPlayer("https://ice10.securenetsystems.net/WQIO?type=.mp3")
-#station2.audio_set_volume(121)
+# Playback volume when in menu/speaking time
+vol_low = 70
 
-global s_one_playing
-global s_two_playing
+# Station stream URLs
+# Any station/file that works with VLC should work here
+url1 = "https://listen.moe/opus"
+url2 = "https://ice10.securenetsystems.net/WQIO?type=.mp3"
+url3 = "https://wosu.streamguys1.com/Classical_128"
 
-def signal_handler(signal, frame):
-    global interrupted
-    interrupted = True
+# Enables reload command
+debug = True
+# Config end
+
+
+#define VLC instance
+instance = vlc.Instance('--input-repeat=-1', '--fullscreen')
+
+#Define VLC player
+player=instance.media_player_new()
+
+# Init VLC with url1 as a placeholder
+media=instance.media_new(url1)
+player.set_media(media)
+
+# Placeholders
+global station_n
+station_n = 0
+interrupted = False
 
 def interrupt_callback():
     global interrupted
     return interrupted
 
-class TimeoutError(Exception):
-    pass
-
-def timeout(seconds):
-    def decorator(func):
-        def _handle_timeout(signum, frame):
-            state_sleep()
-
-        def wrapper(*args, **kwargs):
-            signal.signal(signal.SIGALRM, _handle_timeout)
-            signal.alarm(seconds)
-            try:
-                result = func(*args, **kwargs)
-            finally:
-                signal.alarm(0)
-            return result
-
-        return wraps(func)(wrapper)
-
-    return decorator
-
+# Play/pause internet radio stations using VLC
 def station(n):
-    
-    #global station
 
+    # Play station 1
     if n == 1:
-        s_two_playing = False
-        station2.stop()
+        station_n = 1
+        media = instance.media_new(url1)
+        player.set_media(media)
+        player.play()
 
-        s_one_playing = True
-        station1.play()
-        
-
+    # Play station 2
     elif n == 2:
-        s_one_playing = False
-        station1.stop()
-        
+        station_n = 2
+        media = instance.media_new(url2)
+        player.set_media(media)
+        player.play()
 
-        s_two_playing = True
-        station2.play()
-        
+    # Play station 3
+    elif n == 3:
+        station_n = 3
+        media = instance.media_new(url3)
+        player.set_media(media)
+        player.play()
+
+    # Stop playback
     elif n == 0:
-        station1.stop()
-        station2.stop()
-        s_one_playing = False
-        s_two_playing = False
-
-    elif n == None:
-        stop_station(n)
+        player.stop()
 
     state_sleep()
-
+# Speaks the current time in 12-hour format
 def time():
-    if 's_one_playing' in globals():
-        if s_one_playing == True:
-            print('Stopping station 2')
-            s_one_playing = False
-            station1.stop()
-    if 's_two_playing' in globals():
-        if s_two_playing == False:
-            print('Stopping station 2')
-            s_two_playing = False
-            station2.stop()
-
     now = datetime.datetime.now()
-    #d = datetime.strptime("10:30", "%H:%M")
     time = datetime.time(now.hour, now.minute)
+
+    # swap these lines for 24-hour time
     time = time.strftime("%I:%M %p")
-    #print(time)
+    #time = time.strftime("%H:%M %p")
+
     engine.say(time)
-    engine.runAndWait() 
-
-    if 's_one_playing' in globals():
-        if s_one_playing == False:
-            print('Playing station 1')
-            s_one_playing = True
-            station1.play()
-    if 's_two_playing' in globals():
-        if s_two_playing == False:
-            print('Playing station 2')
-            s_two_playing = True
-            station2.play()
-
+    engine.runAndWait()
     state_sleep()
 
+# Restarts the script with any saved changes to sonica.py taking effect
 def reload():
     python = sys.executable
     os.execl(python, python, * sys.argv)
 
-callbacks = [lambda: station(1),
-                 lambda: station(2),
-                 lambda: station(0),
-                 lambda: state_sleep(),
-                 lambda: time(),
-                 lambda: reload()]
-models = ['Station 1.pmdl','Station 2.pmdl', 'pause_en.pmdl', 'sleep.pmdl', 'Time.pmdl', 'reload.pmdl']
-command_detector = snowboydecoder.HotwordDetector(models, sensitivity=command_sensitivity)
+if debug == True:
+    # Filenames for models
+    models = ['Station 1.pmdl','Station 2.pmdl', 'Station 3.pmdl', 'pause_en.pmdl', 'sleep.pmdl', 'Time.pmdl', 'reload.pmdl']
+    # Commands to execute
+    callbacks = [lambda: station(1),
+                     lambda: station(2),
+                     lambda: station(3),
+                     lambda: station(0),
+                     lambda: state_sleep(),
+                     lambda: time(),
+                     lambda: reload()]
+else:
+    # Filenames for models
+    models = ['Station 1.pmdl','Station 2.pmdl', 'Station 3.pmdl', 'pause_en.pmdl', 'sleep.pmdl', 'Time.pmdl']
+    # Commands to execute
+    callbacks = [lambda: station(1),
+                     lambda: station(2),
+                     lambda: station(3),
+                     lambda: station(0),
+                     lambda: state_sleep(),
+                     lambda: time()]
 
-#@timeout(5)
+# Model filename
+model = 'Hey Sonica.pmdl'
+
+command_detector = snowboydecoder.HotwordDetector(models, sensitivity=command_sensitivity)
+detector = snowboydecoder.HotwordDetector(model, sensitivity=hotword_sensitivity)
+
 def state_menu():
     print('MENU')
+
+    # Reduce volume
+    player.audio_set_volume(vol_low)
+
+    # Play menu tone
     snowboydecoder.play_audio_file(snowboydecoder.DETECT_DING)
-    menu = True
-    
-    #models = ['Station 1.pmdl','Station 2.pmdl', 'pause_en.pmdl', 'sleep.pmdl', 'Time.pmdl']
 
-    #command_detector = snowboydecoder.HotwordDetector(models, sensitivity=command_sensitivity)
-    #snowboydecoder.play_audio_file(snowboydecoder.DETECT_DING)
+    # Start detection for commands
     command_detector.start(detected_callback=callbacks, interrupt_check=interrupt_callback, sleep_time=0.03)
-    #time = time.time()
-    
 
-
+    # Stop detection
+    detector.terminate()
 
 def state_sleep():
-    print('')
-    snowboydecoder.play_audio_file(snowboydecoder.DETECT_DONG)
-    
-    model = 'Hey Sonica.pmdl'
-    signal.signal(signal.SIGINT, signal_handler)
+    print('SLEEP')
 
-    detector = snowboydecoder.HotwordDetector(model, sensitivity=hotword_sensitivity)
+    # Restore volume to normal
+    player.audio_set_volume(vol)
+
+    # Play sleep tone
+    snowboydecoder.play_audio_file(snowboydecoder.DETECT_DONG)
+
+    # Start detection for hotword
     detector.start(detected_callback=state_menu, interrupt_check=interrupt_callback, sleep_time=0.03)
+
+    # Stop detection
     detector.terminate()
-menu = False
+
 state_sleep()
