@@ -1,6 +1,6 @@
 # Sonica
 
-A personal assistant using [dragonfly2](https://github.com/dictation-toolbox/dragonfly) with skill support, and is multiplatform across Windows and Linux.
+A WIP personal assistant using [dragonfly2](https://github.com/dictation-toolbox/dragonfly) with skill support, and is multiplatform across Windows and Linux.
 
 ## TODO
 
